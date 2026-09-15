@@ -1,7 +1,17 @@
+import logging
 import os
+import tempfile
 import time
 from collections import defaultdict, deque
 from pathlib import Path
+
+# Serverless filesystem resilience: ensure SQLite and system temp directories are explicitly set
+if not os.environ.get("TMPDIR"):
+    os.environ["TMPDIR"] = tempfile.gettempdir()
+if not os.environ.get("SQLITE_TMPDIR"):
+    os.environ["SQLITE_TMPDIR"] = tempfile.gettempdir()
+
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -234,15 +244,54 @@ def optimize(request: OptimizationRequest):
             for item in analysis.index_recommendations
         ]
 
-        # 9. Advanced Viva & Intelligence Features
-        performance_pred = PerformancePredictorService.predict(request.slow_query, request.ddl_schema, actual_ms=result.original_ms)
-        learned_opt = LearnedOptimizerService.analyze_and_learn(request.slow_query, result.execution_plan, measured_speedup=speedup_pct)
-        root_cause = RootCauseService.diagnose(request.slow_query, result.execution_plan, analysis.detected_anti_patterns, index_adv)
-        scientific_exp = ScientificExperimentService.run_experiment(request.slow_query, request.ddl_schema, iterations=25)
-        perf_cliff = PerformanceCliffService.detect_cliff(request.slow_query, request.ddl_schema)
-        plan_heatmap = generate_plan_heatmap(visual_orig)
-        dual_explainer = ExplainerService.generate_dual_explanation(request.slow_query, result.execution_plan)
-        decision_tree = DecisionTreeService.build_tree(request.slow_query, result.execution_plan, len(analysis.detected_anti_patterns) > 0)
+        # 9. Advanced Viva & Intelligence Features (resilient to individual failures)
+        try:
+            performance_pred = PerformancePredictorService.predict(request.slow_query, request.ddl_schema, actual_ms=result.original_ms)
+        except Exception as exc:
+            logger.warning(f"PerformancePredictorService failed: {exc}")
+            performance_pred = None
+
+        try:
+            learned_opt = LearnedOptimizerService.analyze_and_learn(request.slow_query, result.execution_plan, measured_speedup=speedup_pct)
+        except Exception as exc:
+            logger.warning(f"LearnedOptimizerService failed: {exc}")
+            learned_opt = None
+
+        try:
+            root_cause = RootCauseService.diagnose(request.slow_query, result.execution_plan, analysis.detected_anti_patterns, index_adv)
+        except Exception as exc:
+            logger.warning(f"RootCauseService failed: {exc}")
+            root_cause = None
+
+        try:
+            scientific_exp = ScientificExperimentService.run_experiment(request.slow_query, request.ddl_schema, iterations=25)
+        except Exception as exc:
+            logger.warning(f"ScientificExperimentService failed: {exc}")
+            scientific_exp = None
+
+        try:
+            perf_cliff = PerformanceCliffService.detect_cliff(request.slow_query, request.ddl_schema)
+        except Exception as exc:
+            logger.warning(f"PerformanceCliffService failed: {exc}")
+            perf_cliff = None
+
+        try:
+            plan_heatmap = generate_plan_heatmap(visual_orig)
+        except Exception as exc:
+            logger.warning(f"generate_plan_heatmap failed: {exc}")
+            plan_heatmap = []
+
+        try:
+            dual_explainer = ExplainerService.generate_dual_explanation(request.slow_query, result.execution_plan)
+        except Exception as exc:
+            logger.warning(f"ExplainerService failed: {exc}")
+            dual_explainer = []
+
+        try:
+            decision_tree = DecisionTreeService.build_tree(request.slow_query, result.execution_plan, len(analysis.detected_anti_patterns) > 0)
+        except Exception as exc:
+            logger.warning(f"DecisionTreeService failed: {exc}")
+            decision_tree = []
 
         return OptimizationResponse(
             **analysis.model_dump(),

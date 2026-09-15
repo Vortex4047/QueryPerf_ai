@@ -63,6 +63,9 @@ class DatabaseSandboxService:
     @staticmethod
     def _connection() -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:", timeout=3.0)
+        conn.execute("PRAGMA temp_store = 2")
+        conn.execute("PRAGMA journal_mode = MEMORY")
+        conn.execute("PRAGMA synchronous = OFF")
         conn.execute("PRAGMA busy_timeout = 3000")
         if hasattr(conn, "enable_load_extension"):
             conn.enable_load_extension(False)

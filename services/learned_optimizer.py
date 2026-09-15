@@ -18,6 +18,7 @@ class LearnedOptimizerService:
         db_path = cls.get_db_path()
         try:
             with sqlite3.connect(db_path) as conn:
+                conn.execute("PRAGMA temp_store = 2")
                 conn.execute(
                     """
                     CREATE TABLE IF NOT EXISTS learned_optimizer_patterns (

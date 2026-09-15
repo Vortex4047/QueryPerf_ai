@@ -124,7 +124,10 @@ class BattleArenaService:
                 )
             )
 
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
 
         # Sort contenders by execution_ms (lowest latency wins)
         participants.sort(key=lambda p: p.execution_ms)

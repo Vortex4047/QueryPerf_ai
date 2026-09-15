@@ -17,40 +17,50 @@ class QueryHistoryService:
         self.path = get_storage_db_path(".queryperf_history.sqlite")
         try:
             with sqlite3.connect(self.path) as conn:
-                conn.execute("""CREATE TABLE IF NOT EXISTS query_history (
-                    fingerprint TEXT PRIMARY KEY,
-                    query_preview TEXT NOT NULL,
-                    inefficiency_score INTEGER NOT NULL,
-                    runs INTEGER NOT NULL DEFAULT 0,
-                    latest_speedup TEXT NOT NULL,
-                    latest_speedup_pct REAL NOT NULL DEFAULT 0.0,
-                    last_seen TEXT NOT NULL,
-                    execution_ms REAL NOT NULL DEFAULT 0.0,
-                    antipatterns TEXT NOT NULL DEFAULT ''
-                )""")
-
-                # Add any missing columns dynamically if upgrading from an older DB version
-                for col, col_type in [
-                    ("latest_speedup_pct", "REAL NOT NULL DEFAULT 0.0"),
-                    ("execution_ms", "REAL NOT NULL DEFAULT 0.0"),
-                    ("antipatterns", "TEXT NOT NULL DEFAULT ''"),
-                ]:
-                    try:
-                        conn.execute(f"ALTER TABLE query_history ADD COLUMN {col} {col_type}")
-                    except sqlite3.OperationalError:
-                        pass
-
-                conn.execute("""CREATE TABLE IF NOT EXISTS regression_log (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    fingerprint TEXT NOT NULL,
-                    previous_ms REAL NOT NULL,
-                    current_ms REAL NOT NULL,
-                    regression_percent REAL NOT NULL,
-                    cause TEXT NOT NULL,
-                    timestamp TEXT NOT NULL
-                )""")
+                self._setup_tables(conn)
         except Exception as exc:
-            logger.warning(f"Could not initialize SQLite history database at {self.path}: {exc}")
+            logger.warning(f"Could not initialize SQLite history database at {self.path}: {exc}. Falling back to in-memory database.")
+            self.path = ":memory:"
+            try:
+                with sqlite3.connect(self.path) as conn:
+                    self._setup_tables(conn)
+            except Exception:
+                pass
+
+    def _setup_tables(self, conn: sqlite3.Connection) -> None:
+        conn.execute("PRAGMA temp_store = 2")
+        conn.execute("""CREATE TABLE IF NOT EXISTS query_history (
+            fingerprint TEXT PRIMARY KEY,
+            query_preview TEXT NOT NULL,
+            inefficiency_score INTEGER NOT NULL,
+            runs INTEGER NOT NULL DEFAULT 0,
+            latest_speedup TEXT NOT NULL,
+            latest_speedup_pct REAL NOT NULL DEFAULT 0.0,
+            last_seen TEXT NOT NULL,
+            execution_ms REAL NOT NULL DEFAULT 0.0,
+            antipatterns TEXT NOT NULL DEFAULT ''
+        )""")
+
+        # Add any missing columns dynamically if upgrading from an older DB version
+        for col, col_type in [
+            ("latest_speedup_pct", "REAL NOT NULL DEFAULT 0.0"),
+            ("execution_ms", "REAL NOT NULL DEFAULT 0.0"),
+            ("antipatterns", "TEXT NOT NULL DEFAULT ''"),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE query_history ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+
+        conn.execute("""CREATE TABLE IF NOT EXISTS regression_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fingerprint TEXT NOT NULL,
+            previous_ms REAL NOT NULL,
+            current_ms REAL NOT NULL,
+            regression_percent REAL NOT NULL,
+            cause TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        )""")
 
     @staticmethod
     def fingerprint(query: str) -> str:

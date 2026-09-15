@@ -52,6 +52,38 @@ class TestServerlessResilience(unittest.TestCase):
             self.assertIsNotNone(res.visual_plan_original)
             self.assertIsNotNone(res.learned_optimization)
 
+    def test_db_path_on_vercel_env_variants(self):
+        for key in ["VERCEL_ENV", "VERCEL_URL", "VERCEL_REGION", "NOW_REGION"]:
+            with patch.dict(os.environ, {key: "test_val"}, clear=True):
+                path = get_storage_db_path("test.sqlite")
+                self.assertTrue(path.startswith(tempfile.gettempdir()))
+
+    def test_ecommerce_scenario_in_vercel_mode(self):
+        """Tests the exact eCommerce scenario from Scenario 1 under simulated Vercel serverless environment."""
+        with patch.dict(os.environ, {"VERCEL": "1", "VERCEL_ENV": "production"}):
+            schema = """CREATE TABLE customers (
+                customer_id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                created_at DATETIME
+            );
+
+            CREATE TABLE orders (
+                order_id INTEGER PRIMARY KEY,
+                customer_id INTEGER NOT NULL,
+                order_date DATE NOT NULL,
+                total_amount DECIMAL(10,2),
+                status TEXT
+            );"""
+            query = """SELECT * FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id WHERE strftime('%Y', o.order_date) = '2025' AND o.status LIKE '%DELIVERED%' ORDER BY o.total_amount DESC;"""
+            req = OptimizationRequest(ddl_schema=schema, slow_query=query, engine=EngineType.SQLITE)
+            res = optimize(req)
+            self.assertIsNotNone(res)
+            self.assertIsNotNone(res.visual_plan_original)
+            self.assertGreater(len(res.what_if_indexes), 0)
+            self.assertIsNotNone(res.scientific_experiment)
+            self.assertIsNotNone(res.performance_cliff)
+
 
 if __name__ == "__main__":
     unittest.main()

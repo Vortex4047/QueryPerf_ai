@@ -12,8 +12,11 @@ class PerformanceCliffService:
         sandbox = DatabaseSandboxService()
 
         for row_count in scales:
+            conn = None
             try:
                 conn = sqlite3.connect(":memory:")
+                conn.execute("PRAGMA temp_store = 2")
+                conn.execute("PRAGMA journal_mode = MEMORY")
                 conn.row_factory = sqlite3.Row
                 # Execute base schema
                 conn.executescript(ddl_schema)
@@ -59,11 +62,15 @@ class PerformanceCliffService:
                             t_indexed = max(0.01, (time.perf_counter() - t0) / 5.0 * 1000.0)
                 except Exception:
                     t_indexed = t_unindexed * 0.4
-
-                conn.close()
             except Exception:
                 t_unindexed = max(0.05, 0.05 * (row_count / 50))
                 t_indexed = max(0.02, t_unindexed * 0.3)
+            finally:
+                if conn:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
 
 
             data_points.append(
