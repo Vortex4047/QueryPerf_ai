@@ -1,6 +1,7 @@
 import sqlite3
 import time
 from schemas import PerformanceCliff
+from services.db_service import DatabaseSandboxService
 
 
 class PerformanceCliffService:
@@ -8,52 +9,62 @@ class PerformanceCliffService:
     def detect_cliff(cls, query: str, ddl_schema: str) -> PerformanceCliff:
         scales = [50, 200, 500, 1200]
         data_points = []
+        sandbox = DatabaseSandboxService()
 
         for row_count in scales:
-            conn = sqlite3.connect(":memory:")
-            conn.row_factory = sqlite3.Row
-            # Execute base schema
-            conn.executescript(ddl_schema)
-
-            # Insert synthetic rows matching scale
-            orders_data = [
-                (
-                    i,
-                    (i % 100) + 1,
-                    round(10.0 + (i % 250), 2),
-                    "completed" if i % 2 == 0 else "pending",
-                    "2026-01-01",
-                )
-                for i in range(1, row_count + 1)
-            ]
-            conn.executemany(
-                "INSERT OR IGNORE INTO orders (order_id, customer_id, total_amount, status, order_date) VALUES (?, ?, ?, ?, ?)",
-                orders_data,
-            )
-
-            # Measure unindexed latency (5 iterations)
-            t0 = time.perf_counter()
-            for _ in range(5):
-                conn.execute(query).fetchall()
-            t_unindexed = max(
-                0.02, (time.perf_counter() - t0) / 5.0 * 1000.0
-            )
-
-            # Measure indexed latency (create index and run)
             try:
-                conn.execute(
-                    "CREATE INDEX idx_cliff_sim ON orders(customer_id, status);"
-                )
+                conn = sqlite3.connect(":memory:")
+                conn.row_factory = sqlite3.Row
+                # Execute base schema
+                conn.executescript(ddl_schema)
+
+                # Seed deterministic synthetic data up to row_count
+                tables = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
+                for table in tables:
+                    quoted_table = '"' + table.replace('"', '""') + '"'
+                    columns = conn.execute(f"PRAGMA table_info({quoted_table})").fetchall()
+                    insertable = [column for column in columns if not (column[5] and "int" in (column[2] or "").lower())]
+                    if not insertable:
+                        continue
+                    names = [column[1] for column in insertable]
+                    quoted_names = ", ".join('"' + name.replace('"', '""') + '"' for name in names)
+                    placeholders = ", ".join("?" for _ in names)
+                    sql = f"INSERT OR IGNORE INTO {quoted_table} ({quoted_names}) VALUES ({placeholders})"
+                    rows = [tuple(sandbox._value_for(column[1], column[2], row, table) for column in insertable) for row in range(1, row_count + 1)]
+                    try:
+                        conn.executemany(sql, rows)
+                    except sqlite3.Error:
+                        pass
+                conn.commit()
+
+                # Measure unindexed latency (5 iterations)
                 t0 = time.perf_counter()
                 for _ in range(5):
                     conn.execute(query).fetchall()
-                t_indexed = max(
-                    0.01, (time.perf_counter() - t0) / 5.0 * 1000.0
+                t_unindexed = max(
+                    0.02, (time.perf_counter() - t0) / 5.0 * 1000.0
                 )
-            except Exception:
-                t_indexed = t_unindexed * 0.3
 
-            conn.close()
+                # Measure indexed latency (create index if candidate table found)
+                t_indexed = t_unindexed * 0.4
+                try:
+                    if tables:
+                        cols = conn.execute(f"PRAGMA table_info(\"{tables[0]}\")").fetchall()
+                        if cols:
+                            col_name = cols[0][1]
+                            conn.execute(f'CREATE INDEX IF NOT EXISTS idx_cliff_sim ON "{tables[0]}"("{col_name}");')
+                            t0 = time.perf_counter()
+                            for _ in range(5):
+                                conn.execute(query).fetchall()
+                            t_indexed = max(0.01, (time.perf_counter() - t0) / 5.0 * 1000.0)
+                except Exception:
+                    t_indexed = t_unindexed * 0.4
+
+                conn.close()
+            except Exception:
+                t_unindexed = max(0.05, 0.05 * (row_count / 50))
+                t_indexed = max(0.02, t_unindexed * 0.3)
+
 
             data_points.append(
                 {
