@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.queryperf_history.sqlite
+.agent/
+.agents/
+node_modules/

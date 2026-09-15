@@ -1,0 +1,1057 @@
+<!doctype html>
+<html lang="en" class="dark h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QueryPerf AI — High-Performance SQL Optimization & Benchmark Lab</title>
+  
+  <!-- Modern Typography: Plus Jakarta Sans + JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace']
+          },
+          colors: {
+            obsidian: {
+              950: '#07080c',
+              900: '#0c0f17',
+              850: '#111520',
+              800: '#171d2b',
+              750: '#1e2538',
+              700: '#263148',
+              600: '#354363',
+              border: '#1b2234',
+              'border-subtle': 'rgba(221, 219, 219, 0.03)',
+              'border-hover': '#2c3750'
+            },
+            accent: {
+              emerald: '#10b981',
+              cyan: '#06b6d4',
+              amber: '#f59e0b',
+              rose: '#f43f5e',
+              indigo: '#6366f1'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* CSS Reset & Dark Base */
+    *, ::before, ::after { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      background-color: #07080c;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+    code, pre, .font-mono {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Calibrated Dark Scrollbars */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #07080c; }
+    ::-webkit-scrollbar-thumb { background: #1b2234; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #2c3750; }
+
+    /* Split Workspace Grid Layout */
+    #workspace {
+      grid-template-columns: minmax(430px, 1.05fr) 6px minmax(520px, 1.45fr);
+    }
+    #divider {
+      cursor: col-resize;
+      user-select: none;
+      transition: background-color 0.15s ease;
+    }
+    #divider:hover, #divider:active {
+      background-color: #10b981;
+    }
+
+    /* Monaco & Fallback Editor */
+    #editor { display: none; }
+    .fallback-editor {
+      display: block; width: 100%; height: 100%;
+      resize: none; border: 0; background: #080a10; color: #e2e8f0;
+      padding: 16px; font: 13px/1.65 'JetBrains Mono', monospace; outline: 0;
+    }
+    .fallback-editor[hidden] { display: none; }
+
+    /* Button Micro-Interactions */
+    .btn-tactile {
+      transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+      cursor: pointer;
+    }
+    .btn-tactile:active {
+      transform: scale(0.98);
+    }
+
+    /* Primary Execution Button */
+    .btn-execute {
+      position: relative;
+      background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+      color: #ffffff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+    .btn-execute:hover {
+      background: linear-gradient(180deg, #34d399 0%, #10b981 100%);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      transform: translateY(-1px);
+    }
+    .btn-execute:active {
+      transform: translateY(0) scale(0.99);
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.35);
+    }
+
+    /* Shimmer Loading Animation */
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #0c0f17 25%, #171d2b 50%, #0c0f17 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite ease-in-out;
+    }
+
+    /* Responsive Fallback for Small Displays */
+    @media (max-width: 1024px) {
+      #workspace { grid-template-columns: 1fr !important; }
+      #divider { display: none; }
+      html, body { overflow-y: auto; height: auto; }
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col antialiased selection:bg-emerald-500/30 selection:text-emerald-200">
+
+  <!-- ================= TOP COMMAND BAR (54px) ================= -->
+  <header class="h-14 shrink-0 border-b border-obsidian-border bg-obsidian-900/95 backdrop-blur-md px-4 flex items-center justify-between gap-3 z-30">
+    
+    <!-- Brand & Identity -->
+    <div class="flex items-center gap-3">
+      <div class="h-8 w-8 rounded-lg bg-obsidian-850 border border-obsidian-border flex items-center justify-center text-emerald-400 shadow-sm shadow-emerald-500/10">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+          <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+          <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"></path>
+        </svg>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-sm font-bold tracking-tight text-white">QueryPerf <span class="text-emerald-400">AI</span></span>
+        <span class="rounded px-1.5 py-0.5 text-[9px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">v2.5 PRO</span>
+      </div>
+      <div class="hidden sm:flex items-center gap-2 pl-3 border-l border-obsidian-border text-[11px] text-slate-400">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="font-mono text-[10px] text-slate-400">Sandbox Isolated</span>
+      </div>
+    </div>
+
+    <!-- Center: Engine Switcher & Quick Scenario Selector -->
+    <div class="flex items-center gap-2">
+      <!-- Database Engine Toggle -->
+      <div class="flex items-center rounded-lg border border-obsidian-border bg-obsidian-950 p-0.5 text-xs">
+        <span class="text-[10px] font-mono font-semibold uppercase text-slate-500 px-2">Dialect</span>
+        <button type="button" data-engine="sqlite" class="engine-btn rounded-md px-2.5 py-1 text-xs font-semibold bg-emerald-600 text-white shadow-sm transition">SQLite</button>
+        <button type="button" data-engine="postgres" class="engine-btn rounded-md px-2.5 py-1 text-xs text-slate-400 hover:text-white transition">PostgreSQL</button>
+        <button type="button" data-engine="mysql" class="engine-btn rounded-md px-2.5 py-1 text-xs text-slate-400 hover:text-white transition">MySQL</button>
+      </div>
+
+      <!-- Preset Scenarios -->
+      <div class="hidden md:flex items-center gap-1 rounded-lg border border-obsidian-border bg-obsidian-950 p-0.5 text-xs">
+        <select id="samplePreset" class="bg-transparent px-2.5 py-1 text-xs font-medium text-slate-300 focus:outline-none cursor-pointer">
+          <option value="ecommerce">Scenario 1: Non-SARGable E-Commerce Join</option>
+          <option value="subquery">Scenario 2: Correlated Subquery Inefficiency</option>
+          <option value="wildcard">Scenario 3: Unindexed Leading Wildcard LIKE</option>
+        </select>
+        <button id="sampleBtn" class="btn-tactile rounded-md bg-obsidian-850 hover:bg-obsidian-800 text-emerald-400 hover:text-white px-2.5 py-1 text-xs font-semibold border border-obsidian-border transition">
+          Load
+        </button>
+      </div>
+    </div>
+
+    <!-- Right: Utility Actions & Modals -->
+    <div class="flex items-center gap-2">
+      <!-- AI Copilot Trigger -->
+      <button id="nlSqlBtn" type="button" class="btn-tactile inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-950/30 hover:bg-indigo-900/50 px-2.5 py-1 text-xs font-medium text-indigo-300 hover:text-white transition shadow-sm" title="Natural Language SQL Copilot">
+        <svg class="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/>
+        </svg>
+        <span>AI Copilot</span>
+      </button>
+
+      <!-- Analytics Dashboard Trigger -->
+      <button id="dashboardBtn" type="button" class="btn-tactile inline-flex items-center gap-1.5 rounded-lg border border-obsidian-border bg-obsidian-850 hover:bg-obsidian-800 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white transition shadow-sm" title="Historical Execution Metrics">
+        <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"></line>
+          <line x1="12" y1="20" x2="12" y2="4"></line>
+          <line x1="6" y1="20" x2="6" y2="14"></line>
+        </svg>
+        <span class="hidden sm:inline">Metrics</span>
+      </button>
+
+      <!-- Shortcuts / Guide Trigger -->
+      <button id="shortcutsBtn" type="button" onclick="document.getElementById('shortcutsModal').classList.remove('hidden')" class="btn-tactile h-7 w-7 rounded-lg border border-obsidian-border bg-obsidian-850 hover:bg-obsidian-800 flex items-center justify-center text-slate-400 hover:text-white transition" title="Keyboard Shortcuts & Lab Workflow">
+        <span class="font-mono text-xs font-bold">?</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- REGRESSION ALERT BANNER (Transient) -->
+  <div id="regressionBanner" class="hidden shrink-0 border-b border-rose-500/40 bg-rose-950/80 px-4 py-2 text-xs text-rose-200 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <span class="h-2 w-2 rounded-full bg-rose-500 animate-ping"></span>
+      <span class="font-bold text-rose-300 uppercase tracking-wide font-mono text-[10px]">Regression Alert:</span>
+      <span id="regressionText" class="font-mono text-xs"></span>
+    </div>
+    <button type="button" onclick="document.getElementById('regressionBanner').classList.add('hidden')" class="text-rose-400 hover:text-white text-sm font-bold px-2">&times;</button>
+  </div>
+
+  <!-- ERROR ALERT CONTAINER (Transient) -->
+  <div id="error" class="hidden shrink-0 border-b border-rose-500/40 bg-rose-950/70 px-4 py-2 text-xs text-rose-200 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-rose-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>
+      <div id="errorMsg" class="font-mono text-xs"></div>
+    </div>
+    <button type="button" onclick="hideError()" class="text-rose-400 hover:text-white text-sm font-bold px-2">&times;</button>
+  </div>
+
+  <!-- ================= MAIN WORKBENCH VIEWPORT ================= -->
+  <main class="flex-1 min-h-0 p-2 overflow-hidden">
+    <div id="workspace" class="h-full grid overflow-hidden rounded-xl border border-obsidian-border bg-obsidian-900 shadow-2xl">
+
+      <!-- ================= LEFT COLUMN: SQL & SCHEMA WORKBENCH ================= -->
+      <section class="min-w-0 flex flex-col border-r border-obsidian-border bg-obsidian-950 overflow-hidden">
+        
+        <!-- Editor Header Tabs -->
+        <div class="h-10 shrink-0 border-b border-obsidian-border bg-obsidian-900/70 px-3.5 flex items-center justify-between">
+          <div class="flex items-center gap-1">
+            <button type="button" data-editor-tab="query" class="editor-tab btn-tactile rounded-md px-3 py-1 text-xs font-semibold bg-obsidian-800 text-white border border-obsidian-border transition">
+              SQL Query
+            </button>
+            <button type="button" data-editor-tab="schema" class="editor-tab btn-tactile rounded-md px-3 py-1 text-xs font-medium text-slate-400 hover:text-slate-200 border border-transparent transition">
+              Schema DDL
+            </button>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+            <span class="hidden sm:inline text-slate-500">Run:</span>
+            <kbd class="rounded px-1.5 py-0.5 text-[10px] font-mono bg-obsidian-850 text-slate-300 border border-obsidian-border">⌘ ↵</kbd>
+          </div>
+        </div>
+
+        <!-- Monaco / Textarea Editor Container -->
+        <div class="flex-1 min-h-0 relative overflow-hidden bg-[#07080c]">
+          <div id="editor" class="h-full w-full"></div>
+          <textarea id="query" class="fallback-editor" aria-label="SQL query" spellcheck="false">SELECT * FROM customers c LEFT JOIN orders o ON c.customer_id = o.customer_id WHERE strftime('%Y', o.order_date) = '2025' AND o.status LIKE '%DELIVERED%' ORDER BY o.total_amount DESC;</textarea>
+          <textarea id="ddl" class="fallback-editor" aria-label="Database schema" hidden spellcheck="false">CREATE TABLE customers (
+    customer_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    created_at DATETIME
+);
+
+CREATE TABLE orders (
+    order_id INTEGER PRIMARY KEY,
+    customer_id INTEGER NOT NULL,
+    order_date DATE NOT NULL,
+    total_amount DECIMAL(10,2),
+    status TEXT
+);</textarea>
+        </div>
+
+        <!-- Bottom Action Dock -->
+        <div class="shrink-0 border-t border-obsidian-border bg-obsidian-900/80 p-2.5 flex items-center justify-between gap-2.5">
+          <div class="flex items-center gap-2">
+            <button type="button" id="formatSqlBtn" onclick="formatCurrentEditorSql()" class="btn-tactile rounded-lg border border-obsidian-border bg-obsidian-850 hover:bg-obsidian-800 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition" title="Format SQL query">
+              Format
+            </button>
+            <button type="button" id="clearEditorBtn" onclick="clearCurrentEditor()" class="btn-tactile rounded-lg border border-obsidian-border bg-obsidian-850 hover:bg-obsidian-800 px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:text-rose-400 transition" title="Clear current editor">
+              Clear
+            </button>
+          </div>
+
+          <!-- Primary Execute & Benchmark Button -->
+          <button id="analyzeBtn" type="button" class="btn-execute btn-tactile flex-1 max-w-sm rounded-lg px-4 py-2 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none">
+            <span id="analyzeSpinner" class="hidden h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span id="buttonText" class="font-bold tracking-wide">Optimize & Benchmark Query</span>
+            <kbd class="hidden sm:inline rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-mono font-medium text-white/90">⌘ ↵</kbd>
+          </button>
+        </div>
+      </section>
+
+      <!-- ================= RESIZER DIVIDER ================= -->
+      <div id="divider" class="bg-obsidian-border flex items-center justify-center group" title="Drag to resize panels">
+        <div class="w-1 h-8 rounded-full bg-obsidian-700 group-hover:bg-emerald-400 transition-colors"></div>
+      </div>
+
+      <!-- ================= RIGHT COLUMN: PERFORMANCE INTELLIGENCE LAB ================= -->
+      <section class="min-w-0 flex flex-col bg-obsidian-950 overflow-hidden">
+        
+        <!-- Lab Status Header -->
+        <div class="h-10 shrink-0 border-b border-obsidian-border bg-obsidian-900/70 px-4 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono text-[11px]">Lab Diagnostics</span>
+            <span class="text-slate-600">·</span>
+            <span id="engine" class="text-xs text-slate-400 font-mono">Ready for execution</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="historyBtn" type="button" class="btn-tactile rounded-md border border-obsidian-border bg-obsidian-850 hover:bg-obsidian-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white transition">
+              History
+            </button>
+            <button id="exportJsonBtn" type="button" class="btn-tactile rounded-md border border-obsidian-border bg-obsidian-850 hover:bg-obsidian-800 px-2.5 py-1 text-[11px] font-medium text-slate-300 hover:text-white transition">
+              Export JSON
+            </button>
+          </div>
+        </div>
+
+        <!-- Scrollable Output Viewport -->
+        <div class="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+
+          <!-- 1. LOADING SKELETON STATE -->
+          <div id="skeleton" class="hidden space-y-4">
+            <div class="grid grid-cols-4 gap-3">
+              <div class="h-20 rounded-xl shimmer"></div>
+              <div class="h-20 rounded-xl shimmer"></div>
+              <div class="h-20 rounded-xl shimmer"></div>
+              <div class="h-20 rounded-xl shimmer"></div>
+            </div>
+            <div class="h-16 rounded-xl shimmer"></div>
+            <div class="h-64 rounded-xl shimmer"></div>
+          </div>
+
+          <!-- 2. EMPTY ONBOARDING STATE -->
+          <div id="empty" class="py-12 px-6 flex flex-col items-center justify-center text-center">
+            <div class="h-14 w-14 rounded-2xl bg-obsidian-900 border border-obsidian-border flex items-center justify-center text-emerald-400 shadow-lg shadow-emerald-500/10 mb-4">
+              <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <h3 class="text-base font-bold text-white tracking-tight">Performance Lab Ready</h3>
+            <p class="text-xs text-slate-400 max-w-md mt-1.5 leading-relaxed">
+              Execute your SQL query to run empirical sandbox benchmarks, generate physical operator plan graphs, detect anti-pattern smells, and simulate indexes.
+            </p>
+
+            <!-- Quick Scenario Cards -->
+            <div class="mt-6 grid sm:grid-cols-3 gap-3 max-w-xl w-full text-left">
+              <button type="button" onclick="loadSampleScenario('ecommerce')" class="btn-tactile p-3 rounded-xl border border-obsidian-border bg-obsidian-900/70 hover:bg-obsidian-850 hover:border-emerald-500/40 transition">
+                <span class="text-[10px] font-mono uppercase font-bold text-emerald-400 block mb-1">Scenario 1</span>
+                <span class="text-xs font-semibold text-white block">E-Commerce Join</span>
+                <span class="text-[11px] text-slate-400 mt-1 block">Unindexed scan + date function smell</span>
+              </button>
+              <button type="button" onclick="loadSampleScenario('subquery')" class="btn-tactile p-3 rounded-xl border border-obsidian-border bg-obsidian-900/70 hover:bg-obsidian-850 hover:border-cyan-500/40 transition">
+                <span class="text-[10px] font-mono uppercase font-bold text-cyan-400 block mb-1">Scenario 2</span>
+                <span class="text-xs font-semibold text-white block">Correlated Subquery</span>
+                <span class="text-[11px] text-slate-400 mt-1 block">O(N×M) nested loop execution</span>
+              </button>
+              <button type="button" onclick="loadSampleScenario('wildcard')" class="btn-tactile p-3 rounded-xl border border-obsidian-border bg-obsidian-900/70 hover:bg-obsidian-850 hover:border-amber-500/40 transition">
+                <span class="text-[10px] font-mono uppercase font-bold text-amber-400 block mb-1">Scenario 3</span>
+                <span class="text-xs font-semibold text-white block">Leading Wildcard LIKE</span>
+                <span class="text-[11px] text-slate-400 mt-1 block">Forces full sequential scan</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. ACTIVE DIAGNOSTIC OUTPUT CONTAINER -->
+          <div id="output" class="hidden space-y-4">
+
+            <!-- TOP 4 KPI CARDS -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <!-- Original Baseline -->
+              <div class="rounded-xl border border-rose-500/25 bg-obsidian-900 p-3.5 flex flex-col justify-between shadow-sm">
+                <div>
+                  <span class="text-[10px] font-mono uppercase font-bold text-rose-400 tracking-wider">Original Query</span>
+                  <b id="originalMs" class="text-xl font-mono text-rose-200 font-bold block mt-1">-- ms</b>
+                </div>
+                <p id="originalMetric" class="mt-2 text-[11px] text-slate-400 font-mono truncate">CPU -- ms</p>
+              </div>
+
+              <!-- Optimized Speed -->
+              <div class="rounded-xl border border-emerald-500/30 bg-obsidian-900 p-3.5 flex flex-col justify-between shadow-sm">
+                <div>
+                  <span class="text-[10px] font-mono uppercase font-bold text-emerald-400 tracking-wider">Optimized Query</span>
+                  <b id="optimizedMs" class="text-xl font-mono text-emerald-300 font-bold block mt-1">-- ms</b>
+                </div>
+                <p id="optimizedMetric" class="mt-2 text-[11px] text-slate-400 font-mono truncate">CPU -- ms</p>
+              </div>
+
+              <!-- Measured Speedup -->
+              <div class="rounded-xl border border-cyan-500/30 bg-obsidian-900 p-3.5 flex flex-col justify-between shadow-sm">
+                <div>
+                  <span class="text-[10px] font-mono uppercase font-bold text-cyan-400 tracking-wider">Measured Speedup</span>
+                  <b id="speedup" class="text-xl font-mono text-cyan-200 font-bold block mt-1">-- Faster</b>
+                </div>
+                <p id="fingerprint" class="mt-2 text-[11px] text-slate-400 font-mono truncate">#--</p>
+              </div>
+
+              <!-- Confidence Score -->
+              <div class="rounded-xl border border-amber-500/30 bg-obsidian-900 p-3.5 flex flex-col justify-between shadow-sm">
+                <div>
+                  <span class="text-[10px] font-mono uppercase font-bold text-amber-400 tracking-wider">Confidence Score</span>
+                  <div class="flex items-baseline gap-1 mt-1">
+                    <b id="confidenceScore" class="text-xl font-mono text-amber-300 font-bold">--</b>
+                    <span class="text-xs text-slate-500 font-mono">/ 100</span>
+                  </div>
+                </div>
+                <p id="confidenceLevel" class="mt-2 text-[10px] font-mono uppercase font-bold text-amber-400 tracking-wider">Evaluating</p>
+              </div>
+            </div>
+
+            <!-- PREDICTION & LEARNED PATTERN STRIP -->
+            <div id="predictionLearnedGrid" class="grid md:grid-cols-2 gap-3">
+              <!-- Cardinality & Latency Predictor -->
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900/80 p-3.5 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] font-bold text-white uppercase tracking-wider font-mono">Cardinality Predictor</span>
+                    <span id="predRiskBadge" class="rounded px-1.5 py-0.2 text-[9px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">MEDIUM RISK</span>
+                  </div>
+                  <span id="predAccuracyBadge" class="text-xs font-mono font-bold text-emerald-400">--% Accuracy</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-[11px] font-mono bg-obsidian-950 p-2.5 rounded-lg border border-obsidian-border">
+                  <div>
+                    <span class="text-slate-500 block text-[10px]">Estimated Range</span>
+                    <span id="predLatency" class="text-slate-200 font-semibold">~0.30 - 0.65 ms</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-500 block text-[10px]">Actual Measured</span>
+                    <span id="actualLatency" class="text-emerald-400 font-semibold">-- ms</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
+                  <span>Rows: <b id="predRows" class="text-slate-200 font-mono">--</b></span>
+                  <span class="truncate max-w-[200px]">Bottleneck: <b id="predBottleneck" class="text-amber-300">--</b></span>
+                </div>
+              </div>
+
+              <!-- Learned Pattern -->
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900/80 p-3.5 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-[11px] font-bold text-white uppercase tracking-wider font-mono">Learned Optimizer</span>
+                  <span id="learnedConfidence" class="text-xs font-mono font-bold text-cyan-400">--% Confidence</span>
+                </div>
+                <div class="bg-obsidian-950 p-2.5 rounded-lg border border-obsidian-border">
+                  <p id="learnedPattern" class="text-xs font-semibold text-white">Detecting structural pattern…</p>
+                  <p id="learnedStrategy" class="text-[11px] text-slate-400 mt-1 leading-relaxed truncate">Analyzing historical ledger…</p>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 font-mono pt-1">
+                  <span>Precedents: <b id="learnedCount" class="text-slate-200">-- runs</b></span>
+                  <span>Avg Gain: <b id="learnedAvgSpeedup" class="text-emerald-400">--%</b></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- OPERATOR EFFORT HEATMAP BAR -->
+            <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-3 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] font-mono uppercase font-bold text-slate-400">Plan Operator Cost Distribution</span>
+                <button id="openExplainerBtn" type="button" class="btn-tactile text-xs font-medium text-indigo-400 hover:text-white flex items-center gap-1 transition">
+                  <span>Dual Explainer</span>
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                  </svg>
+                </button>
+              </div>
+              <div id="heatmapBar" class="h-2.5 w-full bg-obsidian-950 rounded-full overflow-hidden flex border border-obsidian-border"></div>
+              <div id="heatmapLegend" class="flex flex-wrap gap-3 text-[10px] font-mono text-slate-400 pt-0.5"></div>
+            </div>
+
+            <!-- HORIZONTAL DIAGNOSTIC TABS -->
+            <div class="border-b border-obsidian-border flex gap-1 overflow-x-auto pb-1" id="outputTabs">
+              <button data-tab="visual_plan" class="tab-btn rounded-md px-3 py-1.5 text-xs font-semibold bg-obsidian-800 text-white border border-obsidian-border whitespace-nowrap transition">Visual Plan</button>
+              <button data-tab="linter" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Anti-Patterns (<span id="antiPatternCount">0</span>)</button>
+              <button data-tab="rewrites" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Query Rewrites</button>
+              <button data-tab="index_advisor" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Index Advisor</button>
+              <button data-tab="index_lab" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">What-If Lab</button>
+              <button data-tab="benchmarks" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Benchmarks</button>
+              <button data-tab="root_cause" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Root Cause</button>
+              <button data-tab="battle" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Battle Arena</button>
+              <button data-tab="experiments" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Scientific Test</button>
+              <button data-tab="cliff" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Performance Cliff</button>
+              <button data-tab="complexity" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Complexity</button>
+              <button data-tab="decision_tree" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Decision Tree</button>
+              <button data-tab="preview" class="tab-btn rounded-md px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 whitespace-nowrap transition">Migrations & Data</button>
+            </div>
+
+            <!-- ================= TAB PANELS ================= -->
+
+            <!-- TAB 1: VISUAL EXECUTION PLAN -->
+            <div data-panel="visual_plan" class="tab-panel space-y-3">
+              <div class="flex items-center justify-between text-xs text-slate-400">
+                <span>Inspect physical plan operators and relative cost estimation gauges below.</span>
+                <div class="flex items-center gap-3 font-mono text-[11px]">
+                  <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-rose-500"></span> Scan</span>
+                  <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-emerald-500"></span> Index Seek</span>
+                  <span class="flex items-center gap-1"><span class="h-2 w-2 rounded-full bg-amber-500"></span> Temp B-Tree</span>
+                </div>
+              </div>
+
+              <!-- Side-by-Side Tree Cards -->
+              <div class="grid md:grid-cols-2 gap-3.5">
+                <!-- Original Plan -->
+                <div class="rounded-xl border border-rose-500/25 bg-obsidian-900 p-3.5 flex flex-col shadow-sm">
+                  <div class="flex items-center justify-between border-b border-obsidian-border pb-2 mb-3">
+                    <div class="flex items-center gap-2">
+                      <span class="h-2 w-2 rounded-full bg-rose-500"></span>
+                      <h4 class="text-xs font-bold uppercase tracking-wider text-rose-300 font-mono">Original Plan (Before)</h4>
+                    </div>
+                    <span class="text-[10px] font-mono text-rose-400 bg-rose-950/40 border border-rose-900/40 px-2 py-0.5 rounded">Scans Detected</span>
+                  </div>
+                  <div id="visualPlanOriginal" class="space-y-2 flex-1"></div>
+                </div>
+
+                <!-- Optimized Plan -->
+                <div class="rounded-xl border border-emerald-500/25 bg-obsidian-900 p-3.5 flex flex-col shadow-sm">
+                  <div class="flex items-center justify-between border-b border-obsidian-border pb-2 mb-3">
+                    <div class="flex items-center gap-2">
+                      <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+                      <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-300 font-mono">Optimized Plan (After)</h4>
+                    </div>
+                    <span class="text-[10px] font-mono text-emerald-400 bg-emerald-950/40 border border-emerald-900/40 px-2 py-0.5 rounded">Indexed Seek</span>
+                  </div>
+                  <div id="visualPlanOptimized" class="space-y-2 flex-1"></div>
+                </div>
+              </div>
+
+              <!-- Node Inspector Card -->
+              <div id="nodeInspector" class="hidden rounded-xl border border-indigo-500/40 bg-obsidian-900 p-4 shadow-xl transition-all">
+                <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                  <div class="flex items-center gap-2">
+                    <span id="nodeBadge" class="rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">OPERATOR</span>
+                    <h5 id="nodeTitle" class="text-xs font-bold text-white font-mono">SCAN orders</h5>
+                  </div>
+                  <button type="button" onclick="document.getElementById('nodeInspector').classList.add('hidden')" class="text-slate-400 hover:text-white text-base">&times;</button>
+                </div>
+                <p id="nodeExplanation" class="mt-2 text-xs text-slate-300 leading-relaxed"></p>
+                <div class="mt-3 flex flex-wrap gap-4 text-[11px] text-slate-400 border-t border-obsidian-border pt-2 font-mono">
+                  <span id="nodeTarget">Target Relation: orders</span>
+                  <span id="nodeIndex">Index Used: None (Sequential Scan)</span>
+                </div>
+              </div>
+
+              <!-- Raw Text Plan Accordion -->
+              <details class="rounded-xl border border-obsidian-border bg-obsidian-900 p-3">
+                <summary class="cursor-pointer text-xs font-semibold text-slate-400 hover:text-white">View Raw Text Plans (EXPLAIN QUERY PLAN)</summary>
+                <div class="mt-3 grid md:grid-cols-2 gap-3 text-[11px] font-mono">
+                  <pre id="rawOriginalPlan" class="rounded-lg bg-obsidian-950 p-3 text-rose-300/90 overflow-x-auto border border-rose-900/30"></pre>
+                  <pre id="rawOptimizedPlan" class="rounded-lg bg-obsidian-950 p-3 text-emerald-300/90 overflow-x-auto border border-emerald-900/30"></pre>
+                </div>
+              </details>
+            </div>
+
+            <!-- TAB 2: SQL ANTI-PATTERN SCANNER -->
+            <div data-panel="linter" class="tab-panel hidden space-y-3">
+              <div class="flex items-center justify-between">
+                <p class="text-xs text-slate-400">Static rule analysis evaluating 18+ strict SQL anti-pattern rules.</p>
+                <span id="linterSummaryBadge" class="rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 font-mono">Findings Detected</span>
+              </div>
+              <div id="antiPatternsList" class="space-y-3"></div>
+            </div>
+
+            <!-- TAB 3: QUERY REWRITE PLAYGROUND -->
+            <div data-panel="rewrites" class="tab-panel hidden space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Empirical Candidate Rewrites</h4>
+                  <p class="text-xs text-slate-400">Side-by-side empirical performance comparison of refactoring candidates.</p>
+                </div>
+                <span class="rounded-md bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-1 text-[11px] font-semibold text-indigo-300 font-mono">Benchmarked</span>
+              </div>
+              <div id="rewriteCandidatesGrid" class="grid md:grid-cols-3 gap-3"></div>
+            </div>
+
+            <!-- TAB 4: ADVANCED INDEX ADVISOR -->
+            <div data-panel="index_advisor" class="tab-panel hidden space-y-3">
+              <div>
+                <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Cost / Benefit Index Advisor</h4>
+                <p class="text-xs text-slate-400">Ranked index recommendations tested directly in the local sandbox.</p>
+              </div>
+              <div id="indexAdvisorList" class="space-y-3"></div>
+            </div>
+
+            <!-- TAB 5: INDEX LAB (WHAT-IF SIMULATOR) -->
+            <div data-panel="index_lab" class="tab-panel hidden space-y-3">
+              <div class="rounded-xl border border-indigo-500/30 bg-obsidian-900 p-4 space-y-3 shadow-xl">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Interactive What-If Index Simulator</h4>
+                    <p class="text-xs text-slate-400">Test hypothetical indexes in an isolated SQLite transaction savepoint.</p>
+                  </div>
+                  <span class="rounded px-2 py-0.5 text-[10px] font-mono text-indigo-300 bg-indigo-500/15 border border-indigo-500/30">TRANSACTION SAVEPOINT</span>
+                </div>
+
+                <!-- Quick Presets -->
+                <div class="flex items-center flex-wrap gap-2 text-xs">
+                  <span class="text-[11px] text-slate-400 font-mono">Preset DDL:</span>
+                  <button type="button" class="preset-idx-btn btn-tactile rounded border border-obsidian-border bg-obsidian-950 px-2 py-0.5 text-[11px] font-mono text-indigo-300 hover:border-indigo-400" data-cmd="CREATE INDEX idx_orders_customer_status ON orders(customer_id, status);">+ orders(customer_id, status)</button>
+                  <button type="button" class="preset-idx-btn btn-tactile rounded border border-obsidian-border bg-obsidian-950 px-2 py-0.5 text-[11px] font-mono text-indigo-300 hover:border-indigo-400" data-cmd="CREATE INDEX idx_orders_date_total ON orders(order_date, total_amount);">+ orders(order_date, total_amount)</button>
+                  <button type="button" class="preset-idx-btn btn-tactile rounded border border-obsidian-border bg-obsidian-950 px-2 py-0.5 text-[11px] font-mono text-indigo-300 hover:border-indigo-400" data-cmd="CREATE INDEX idx_customers_email ON customers(email);">+ customers(email)</button>
+                </div>
+
+                <div class="space-y-1.5">
+                  <label class="block text-[11px] font-semibold text-slate-300 font-mono">Hypothetical Index Statement:</label>
+                  <div class="flex gap-2 items-center">
+                    <input id="whatIfInput" type="text" class="flex-1 rounded-lg border border-obsidian-border bg-obsidian-950 px-3 py-2 text-xs font-mono text-indigo-200 focus:outline-none focus:border-indigo-500" value="CREATE INDEX idx_orders_customer_status ON orders(customer_id, status);">
+                    <button id="whatIfSimBtn" type="button" class="btn-tactile rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 text-xs font-semibold shrink-0 transition">
+                      <span id="whatIfBtnText">Simulate Index</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Simulation Result Card -->
+                <div id="whatIfResultCard" class="hidden rounded-lg border border-obsidian-border bg-obsidian-950 p-3.5 space-y-3">
+                  <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                    <div class="flex items-center gap-2">
+                      <span id="whatIfVerdictBadge" class="rounded px-2 py-0.5 text-xs font-bold font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Useful</span>
+                      <span id="whatIfSpeedupBadge" class="text-xs font-mono font-bold text-white">+78.4% Gain</span>
+                    </div>
+                    <span id="whatIfTiming" class="text-xs font-mono text-slate-400">-- ms → -- ms</span>
+                  </div>
+                  <p id="whatIfExplanation" class="text-xs text-slate-300 leading-relaxed"></p>
+                  <div class="grid md:grid-cols-2 gap-3 text-[11px] font-mono pt-2 border-t border-obsidian-border">
+                    <div>
+                      <p class="text-[10px] uppercase font-bold text-rose-400 mb-1">Plan Before</p>
+                      <pre id="whatIfPlanBefore" class="rounded bg-obsidian-900 p-2.5 text-slate-400 border border-obsidian-border overflow-x-auto"></pre>
+                    </div>
+                    <div>
+                      <p class="text-[10px] uppercase font-bold text-emerald-400 mb-1">Plan After</p>
+                      <pre id="whatIfPlanAfter" class="rounded bg-obsidian-900 p-2.5 text-slate-200 border border-obsidian-border overflow-x-auto"></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 6: BENCHMARK GRAPHS & DISTRIBUTION -->
+            <div data-panel="benchmarks" class="tab-panel hidden space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Resource Benchmark Comparison</h4>
+                  <p class="text-xs text-slate-400">Timings across isolated sandboxes with sample test volume.</p>
+                </div>
+                <button id="runDistributionBtn" type="button" class="btn-tactile rounded-lg border border-indigo-500/40 bg-indigo-950/40 px-3 py-1.5 text-xs font-semibold text-indigo-200 hover:bg-indigo-900/60 hover:text-white transition">Run 25-Iteration Distribution</button>
+              </div>
+
+              <!-- Metric Comparison Bars -->
+              <div class="space-y-3.5 rounded-xl border border-obsidian-border bg-obsidian-900 p-4 shadow-sm">
+                <div>
+                  <div class="flex justify-between text-xs mb-1.5 font-mono">
+                    <span class="text-slate-300 font-sans font-semibold">Execution Latency</span>
+                    <span><b class="text-rose-400" id="barOrigMs">-- ms</b> vs <b class="text-emerald-400" id="barOptMs">-- ms</b></span>
+                  </div>
+                  <div class="h-2.5 w-full bg-obsidian-950 rounded-full overflow-hidden flex border border-obsidian-border">
+                    <div id="barOrigWidth" class="bg-rose-500 h-full transition-all duration-500" style="width: 50%"></div>
+                    <div id="barOptWidth" class="bg-emerald-500 h-full transition-all duration-500" style="width: 50%"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex justify-between text-xs mb-1.5 font-mono">
+                    <span class="text-slate-300 font-sans font-semibold">Process CPU Time</span>
+                    <span><b class="text-rose-400" id="barOrigCpu">-- ms</b> vs <b class="text-emerald-400" id="barOptCpu">-- ms</b></span>
+                  </div>
+                  <div class="h-2.5 w-full bg-obsidian-950 rounded-full overflow-hidden flex border border-obsidian-border">
+                    <div id="barOrigCpuWidth" class="bg-rose-500/70 h-full transition-all duration-500" style="width: 50%"></div>
+                    <div id="barOptCpuWidth" class="bg-emerald-500/70 h-full transition-all duration-500" style="width: 50%"></div>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex justify-between text-xs mb-1.5 font-mono">
+                    <span class="text-slate-300 font-sans font-semibold">Plan-Derived I/O Operations</span>
+                    <span><b class="text-rose-400" id="barOrigIo">--</b> vs <b class="text-emerald-400" id="barOptIo">--</b></span>
+                  </div>
+                  <div class="h-2.5 w-full bg-obsidian-950 rounded-full overflow-hidden flex border border-obsidian-border">
+                    <div id="barOrigIoWidth" class="bg-rose-500/50 h-full transition-all duration-500" style="width: 50%"></div>
+                    <div id="barOptIoWidth" class="bg-emerald-500/50 h-full transition-all duration-500" style="width: 50%"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Distribution Results -->
+              <div id="distributionContainer" class="hidden rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                  <h5 class="text-xs font-bold text-white uppercase tracking-wider font-mono">25-Run Distribution Histogram</h5>
+                  <span id="distMedianBadge" class="text-xs font-mono font-bold text-cyan-300">Median: -- ms</span>
+                </div>
+                <div id="distHistogram" class="space-y-2 pt-2"></div>
+              </div>
+            </div>
+
+            <!-- TAB 7: COMPLEXITY & RATIONALE -->
+            <div data-panel="complexity" class="tab-panel hidden space-y-3">
+              <div class="grid md:grid-cols-2 gap-3.5">
+                <!-- Complexity Card -->
+                <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                  <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Query Complexity</h4>
+                    <span id="complexityRiskBadge" class="rounded px-2 py-0.5 text-[10px] font-mono font-bold uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">HIGH RISK</span>
+                  </div>
+                  <div class="grid grid-cols-3 gap-2 text-center font-mono">
+                    <div class="rounded-lg bg-obsidian-950 p-2 border border-obsidian-border">
+                      <p class="text-[10px] uppercase font-bold text-slate-500">JOINs</p>
+                      <b id="complexityJoins" class="text-sm text-white">0</b>
+                    </div>
+                    <div class="rounded-lg bg-obsidian-950 p-2 border border-obsidian-border">
+                      <p class="text-[10px] uppercase font-bold text-slate-500">Subqueries</p>
+                      <b id="complexitySubqueries" class="text-sm text-white">0</b>
+                    </div>
+                    <div class="rounded-lg bg-obsidian-950 p-2 border border-obsidian-border">
+                      <p class="text-[10px] uppercase font-bold text-slate-500">Aggs</p>
+                      <b id="complexityAggs" class="text-sm text-white">0</b>
+                    </div>
+                    <div class="rounded-lg bg-obsidian-950 p-2 border border-obsidian-border">
+                      <p class="text-[10px] uppercase font-bold text-slate-500">Sorts</p>
+                      <b id="complexitySorts" class="text-sm text-white">0</b>
+                    </div>
+                    <div class="rounded-lg bg-obsidian-950 p-2 border border-obsidian-border">
+                      <p class="text-[10px] uppercase font-bold text-slate-500">Filters</p>
+                      <b id="complexityFilters" class="text-sm text-white">0</b>
+                    </div>
+                    <div class="rounded-lg bg-obsidian-950 p-2 border border-obsidian-border">
+                      <p class="text-[10px] uppercase font-bold text-slate-500">Dominant</p>
+                      <b id="complexityDominant" class="text-[11px] text-cyan-300 truncate block">Scan</b>
+                    </div>
+                  </div>
+                  <p id="complexityExplanation" class="text-xs text-slate-300 leading-relaxed pt-1"></p>
+                </div>
+
+                <!-- Confidence Verification -->
+                <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                  <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Confidence Breakdown</h4>
+                    <span id="confidenceCheckBadge" class="text-xs font-mono font-bold text-amber-300">--/100</span>
+                  </div>
+                  <ul id="confidenceChecklist" class="space-y-2 text-xs"></ul>
+                  <div id="confidencePenalties" class="space-y-1 text-[11px] text-rose-400/90 pt-2 border-t border-obsidian-border font-mono"></div>
+                </div>
+              </div>
+
+              <!-- DBA Viva Diagnosis -->
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-2">
+                <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Bottleneck Diagnosis & Viva Takeaway</h4>
+                <p id="diagnosis" class="text-xs leading-relaxed text-slate-300"></p>
+                <div class="rounded-lg border border-indigo-500/30 bg-indigo-950/20 p-3 mt-2">
+                  <b class="text-xs font-bold text-cyan-300 block mb-1">Key Takeaway:</b>
+                  <p id="takeaway" class="text-xs leading-relaxed text-indigo-100"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 8: DATA PREVIEW & MIGRATIONS -->
+            <div data-panel="preview" class="tab-panel hidden space-y-3">
+              <!-- Result Set Preview -->
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-2">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Result Set Verification (First 5 Rows)</h4>
+                  <span class="text-[10px] text-slate-500 font-mono">Guarantees query equivalence</span>
+                </div>
+                <div class="overflow-x-auto rounded-lg border border-obsidian-border">
+                  <table id="previewTable" class="w-full text-left text-xs font-mono">
+                    <thead class="bg-obsidian-950 text-slate-300 border-b border-obsidian-border"></thead>
+                    <tbody class="divide-y divide-obsidian-border/60 text-slate-200"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <!-- Deployable Migrations -->
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Deployable Migrations (Up / Down)</h4>
+                  <span class="text-[10px] text-slate-500">Ready for database CI/CD pipelines</span>
+                </div>
+                <div id="migrations" class="space-y-2.5"></div>
+              </div>
+            </div>
+
+            <!-- TAB 9: ROOT-CAUSE EXPLORER -->
+            <div data-panel="root_cause" class="tab-panel hidden space-y-3">
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                  <div>
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Causal Diagnostic Tree</h4>
+                    <p class="text-[11px] text-slate-400">Traces top-level symptoms down to physical operators and SQL anti-pattern smells.</p>
+                  </div>
+                  <span class="rounded px-2 py-0.5 text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">5-Tier Trace</span>
+                </div>
+                <div id="rootCauseTreeContainer" class="space-y-2.5 pt-1"></div>
+              </div>
+            </div>
+
+            <!-- TAB 10: SQL BATTLE ARENA -->
+            <div data-panel="battle" class="tab-panel hidden space-y-3">
+              <div class="rounded-xl border border-indigo-500/30 bg-obsidian-900 p-4 space-y-3.5 shadow-xl">
+                <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                  <div>
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Optimization Tournament Arena</h4>
+                    <p class="text-[11px] text-slate-400">Head-to-head shootout: Original vs AI Rewrite vs Index Advisor vs Your Custom SQL!</p>
+                  </div>
+                  <span id="battleWinnerBadge" class="text-xs font-mono font-bold text-cyan-300 bg-cyan-950/40 border border-cyan-800/40 px-2 py-0.5 rounded">Awaiting Arena</span>
+                </div>
+
+                <div class="rounded-lg border border-obsidian-border bg-obsidian-950 p-3 space-y-2">
+                  <label class="block text-xs font-semibold text-slate-300 font-mono">Challenge the AI with your own rewrite (optional):</label>
+                  <textarea id="battleHumanInput" rows="2" class="w-full rounded border border-obsidian-border bg-obsidian-900 p-2 text-xs text-indigo-200 font-mono focus:outline-none focus:border-indigo-500" placeholder="e.g. SELECT order_id, total_amount FROM orders WHERE customer_id = 42 LIMIT 10;"></textarea>
+                  <div class="flex justify-end">
+                    <button id="startBattleBtn" type="button" class="btn-tactile rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-1.5 text-xs font-semibold transition">
+                      <span id="startBattleBtnText">Start Arena Tournament</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div id="battleResultsContainer" class="space-y-2.5">
+                  <h5 class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">Leaderboard</h5>
+                  <div id="battleLeaderboard" class="grid sm:grid-cols-2 gap-2.5"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 11: CONTROLLED SCIENTIFIC EXPERIMENT -->
+            <div data-panel="experiments" class="tab-panel hidden space-y-3">
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                  <div>
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Controlled Scientific Experiment</h4>
+                    <p class="text-[11px] text-slate-400">Formal empirical hypothesis testing across 25 iterations with 95% confidence intervals.</p>
+                  </div>
+                  <span id="expPValBadge" class="rounded px-2 py-0.5 text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">p &lt; 0.001</span>
+                </div>
+                <div class="rounded-lg bg-obsidian-950 p-3 border border-obsidian-border">
+                  <span class="text-[10px] uppercase font-bold text-indigo-400 block mb-1 font-mono">Hypothesis</span>
+                  <p id="expHypothesis" class="text-xs text-slate-200 leading-relaxed font-mono"></p>
+                </div>
+                <div class="grid sm:grid-cols-2 gap-3">
+                  <div class="rounded-lg border border-rose-500/30 bg-rose-950/15 p-3 space-y-1 font-mono">
+                    <span class="text-[10px] uppercase font-bold text-rose-400 block font-sans">Control (Baseline)</span>
+                    <b id="expControlMean" class="text-base text-rose-300 font-bold block">-- ms</b>
+                    <span id="expControlStd" class="text-[10px] text-slate-400 block">Std Dev: ±-- ms</span>
+                  </div>
+                  <div class="rounded-lg border border-emerald-500/30 bg-emerald-950/15 p-3 space-y-1 font-mono">
+                    <span class="text-[10px] uppercase font-bold text-emerald-400 block font-sans">Treatment (Optimized)</span>
+                    <b id="expTreatmentMean" class="text-base text-emerald-300 font-bold block">-- ms</b>
+                    <span id="expTreatmentStd" class="text-[10px] text-slate-400 block">Std Dev: ±-- ms</span>
+                  </div>
+                </div>
+                <div class="rounded-lg bg-indigo-950/20 border border-indigo-500/20 p-3 text-xs text-indigo-200">
+                  <b class="text-white block mb-0.5 font-bold">Conclusion:</b>
+                  <p id="expConclusion" class="leading-relaxed"></p>
+                </div>
+              </div>
+            </div>
+
+            <!-- TAB 12: PERFORMANCE CLIFF DETECTOR -->
+            <div data-panel="cliff" class="tab-panel hidden space-y-3">
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                  <div>
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Performance Cliff & Scaling Curve</h4>
+                    <p class="text-[11px] text-slate-400">Cardinality scaling evaluation across 50, 200, 500, and 1,200 rows.</p>
+                  </div>
+                  <span id="cliffTypeBadge" class="rounded px-2 py-0.5 text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/30">LINEAR O(N)</span>
+                </div>
+                <div id="cliffChartContainer" class="space-y-2.5 pt-1"></div>
+                <p id="cliffExplanation" class="text-xs text-slate-300 leading-relaxed rounded-lg bg-obsidian-950 p-3 border border-obsidian-border font-mono"></p>
+              </div>
+            </div>
+
+            <!-- TAB 13: OPTIMIZATION DECISION TREE -->
+            <div data-panel="decision_tree" class="tab-panel hidden space-y-3">
+              <div class="rounded-xl border border-obsidian-border bg-obsidian-900 p-4 space-y-3">
+                <div class="flex items-center justify-between border-b border-obsidian-border pb-2">
+                  <div>
+                    <h4 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Optimizer Decision Pathways</h4>
+                    <p class="text-[11px] text-slate-400">Step-by-step logic gates traversed by the optimizer engine.</p>
+                  </div>
+                  <span class="rounded px-2 py-0.5 text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">Deductive Engine</span>
+                </div>
+                <div id="decisionTreeList" class="space-y-2.5 pt-1"></div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ================= MODALS ================= -->
+
+  <!-- 1. AI NATURAL LANGUAGE COPILOT MODAL -->
+  <div id="copilotModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-2xl border border-indigo-500/40 bg-obsidian-900 p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-obsidian-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="h-8 w-8 rounded-lg bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Natural Language SQL Copilot</h3>
+            <p class="text-[11px] text-slate-400">Translate English intent into schema-aware, index-optimized SQL</p>
+          </div>
+        </div>
+        <button type="button" onclick="document.getElementById('copilotModal').classList.add('hidden')" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <div class="space-y-2">
+        <label class="text-[11px] font-semibold text-slate-300 font-mono">Prompt description:</label>
+        <textarea id="copilotInput" rows="3" class="w-full rounded-xl border border-obsidian-border bg-obsidian-950 p-3 text-xs text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none font-sans" placeholder="e.g. Find customers who spent more than $500 total in 2025 and list them with their total spending.">Find customers who spent more than $500 total in 2025 and list them with their total spending</textarea>
+      </div>
+
+      <div class="flex items-center justify-between pt-1">
+        <span class="text-[10px] text-slate-500 font-mono">Schema-Aware AST Generation</span>
+        <button id="copilotSubmitBtn" type="button" class="btn-tactile rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 text-xs font-semibold transition">
+          <span id="copilotSubmitBtnText">Generate & Optimize</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. ANALYTICS DASHBOARD & HISTORY MODAL -->
+  <div id="dashboardModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-2xl rounded-2xl border border-obsidian-border bg-obsidian-900 p-5 shadow-2xl space-y-4 max-h-[88vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-obsidian-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="h-8 w-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="20" x2="18" y2="10"></line>
+              <line x1="12" y1="20" x2="12" y2="4"></line>
+              <line x1="6" y1="20" x2="6" y2="14"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Execution Metrics & Historical Ledger</h3>
+            <p class="text-[11px] text-slate-400">Aggregate insights calculated directly from SQLite ledger</p>
+          </div>
+        </div>
+        <button type="button" onclick="document.getElementById('dashboardModal').classList.add('hidden')" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <!-- KPIs -->
+      <div class="grid grid-cols-4 gap-2.5 text-center font-mono">
+        <div class="rounded-xl border border-obsidian-border bg-obsidian-950 p-3">
+          <p class="text-[10px] uppercase font-bold text-slate-400">Analyzed</p>
+          <b id="dashTotalQueries" class="text-lg text-white block mt-0.5">0</b>
+        </div>
+        <div class="rounded-xl border border-obsidian-border bg-obsidian-950 p-3">
+          <p class="text-[10px] uppercase font-bold text-slate-400">Avg Speedup</p>
+          <b id="dashAvgSpeedup" class="text-lg text-emerald-400 block mt-0.5">--%</b>
+        </div>
+        <div class="rounded-xl border border-obsidian-border bg-obsidian-950 p-3">
+          <p class="text-[10px] uppercase font-bold text-slate-400">Regressions</p>
+          <b id="dashRegressions" class="text-lg text-rose-400 block mt-0.5">0</b>
+        </div>
+        <div class="rounded-xl border border-obsidian-border bg-obsidian-950 p-3">
+          <p class="text-[10px] uppercase font-bold text-slate-400">Indexes</p>
+          <b id="dashIndexes" class="text-lg text-cyan-400 block mt-0.5">0</b>
+        </div>
+      </div>
+
+      <!-- Anti-Pattern Breakdown -->
+      <div class="rounded-xl border border-obsidian-border bg-obsidian-950 p-3.5 space-y-2">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">Most Frequent Anti-Patterns</h4>
+        <div id="dashAntiPatternList" class="space-y-1.5 text-xs"></div>
+      </div>
+
+      <!-- Slowest Queries -->
+      <div class="rounded-xl border border-obsidian-border bg-obsidian-950 p-3.5 space-y-2">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">Top Slowest Queries in Ledger</h4>
+        <div id="dashSlowQueriesList" class="space-y-2 text-xs"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. DUAL-PERSONA EXPLAINER MODAL -->
+  <div id="explainerModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-xl rounded-2xl border border-indigo-500/40 bg-obsidian-900 p-5 shadow-2xl space-y-4 max-h-[88vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-obsidian-border pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="h-8 w-8 rounded-lg bg-indigo-600/30 border border-indigo-500/40 flex items-center justify-center text-indigo-300 font-bold">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Explainable Query Optimization</h3>
+            <p class="text-[11px] text-slate-400">Dual-perspective walkthrough of optimizer mechanics</p>
+          </div>
+        </div>
+        <button type="button" onclick="document.getElementById('explainerModal').classList.add('hidden')" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <!-- Persona Toggle -->
+      <div class="flex items-center p-1 rounded-xl bg-obsidian-950 border border-obsidian-border gap-1 font-mono text-xs">
+        <button id="personaBeginnerBtn" type="button" class="btn-tactile flex-1 py-1.5 px-3 rounded-lg font-bold text-white bg-indigo-600 transition shadow-sm">
+          Beginner (Intuition Mode)
+        </button>
+        <button id="personaDbaBtn" type="button" class="btn-tactile flex-1 py-1.5 px-3 rounded-lg font-semibold text-slate-400 hover:text-white transition">
+          Staff DBA (Physical Mechanics)
+        </button>
+      </div>
+
+      <div id="explainerStepsContainer" class="space-y-2.5 pt-1"></div>
+    </div>
+  </div>
+
+  <!-- 4. SHORTCUTS & LAB GUIDE MODAL -->
+  <div id="shortcutsModal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-2xl border border-obsidian-border bg-obsidian-900 p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-obsidian-border pb-3">
+        <h3 class="text-sm font-bold text-white">Keyboard Shortcuts & Lab Workflow</h3>
+        <button type="button" onclick="document.getElementById('shortcutsModal').classList.add('hidden')" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+      <div class="space-y-2 text-xs font-mono">
+        <div class="flex items-center justify-between p-2 rounded bg-obsidian-950 border border-obsidian-border">
+          <span class="text-slate-300">Run Benchmark & Analysis</span>
+          <kbd class="px-2 py-0.5 bg-obsidian-800 text-emerald-400 rounded border border-obsidian-border">⌘ + Enter / Ctrl + Enter</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 rounded bg-obsidian-950 border border-obsidian-border">
+          <span class="text-slate-300">Switch between Query & Schema</span>
+          <kbd class="px-2 py-0.5 bg-obsidian-800 text-slate-300 rounded border border-obsidian-border">Alt + 1 / Alt + 2</kbd>
+        </div>
+        <div class="flex items-center justify-between p-2 rounded bg-obsidian-950 border border-obsidian-border">
+          <span class="text-slate-300">Close Open Modal</span>
+          <kbd class="px-2 py-0.5 bg-obsidian-800 text-slate-300 rounded border border-obsidian-border">Escape</kbd>
+        </div>
+      </div>
+      <div class="p-3 rounded-xl bg-obsidian-950 border border-obsidian-border text-xs text-slate-400 space-y-1 font-sans">
+        <b class="text-slate-200 block">How QueryPerf AI works:</b>
+        <p>1. Analyzes SQL query against your schema using AST static linter & optimizer heuristics.</p>
+        <p>2. Executes both original and rewritten queries inside an isolated, read-only SQLite transaction sandbox.</p>
+        <p>3. Measures empirical hardware latency, CPU time, and I/O reads.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monaco Editor Loader & Application Logic -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
